@@ -1,4 +1,4 @@
-# cython: language_level=3
+# cython: language_level=2
 
 import numpy as np
 cimport numpy as np
@@ -97,7 +97,7 @@ cdef class PyDiffeoMoveObj:
         #It will stock the results in the vOut vector if provided; if not provided than a new one
         #will be created (with the overhead associated)
         #The gain performance, correct parameter types are demanded instead of being ensured
-        print("xPy:\n{0}".format(xIn))
+        #print("xPy:\n{0}".format(xIn))
         assert (whichSpace in [0,1]), "which space has to be 0 or 1"
         whichSpaceC = <unsigned int> whichSpace
         #If no input is given
