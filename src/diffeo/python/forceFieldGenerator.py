@@ -8,7 +8,183 @@ import os
 
 import xml.etree.ElementTree as ET
 
-def diffeoForceFieldGeneration(target, scalingVec):
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import pylab
+
+'''
+a
+'''
+def plot_setup(obj_pos = None):
+    
+    fig = plt.figure(figsize=(10,10))
+    fig.clf()
+#    ax = Axes3D(fig)
+    ax = fig.gca(projection='3d')
+
+    # labels
+    plt.xlabel('x-axis')
+    plt.ylabel('y-axis')
+    
+#    ## view
+#    ## All commented = diagonal view
+#    if pg.plot_angle == 'top':
+#        ax.view_init(90,-90) # top view
+#    elif pg.plot_angle == 'front':
+#        ax.view_init(0,0) # front view
+#    elif pg.plot_angle == 'side':
+#        ax.view_init(0,270) # left view
+#    ax.view_init(90,-90)
+
+    ## object
+    ax.bar3d(obj_pos[0] - .05/2, 
+             obj_pos[1] - .05/2, 
+             obj_pos[2] - .05/2, 
+             [.05], [.05], [.05], 
+             color='green',
+             alpha=0.2,
+             edgecolor='none')
+
+    # robot
+    robot_width = .2
+    robot_height = .6
+    robot_length = .4
+    ax.bar3d(-robot_width/2, 
+             -robot_length/2, 
+             -robot_height/2, 
+             robot_width, robot_length, robot_height, 
+             color='red',
+             alpha=0.2,
+             edgecolor='none')
+             
+    # limits
+    if obj_pos != None:
+        lim = 0.5
+        ax.set_xlim3d([obj_pos[0]-lim, obj_pos[0]+lim])
+        ax.set_ylim3d([obj_pos[1]-lim, obj_pos[1]+lim])
+        ax.set_zlim3d([obj_pos[2]-lim, obj_pos[2]+lim])             
+
+    return fig, ax
+
+'''
+a'
+'''
+''' 
+Write the trajs dataset 
+'''     
+def write_dataset(filename,
+                  force_field_wp_vector):
+    
+#    experiment_folder = ""
+#    filename = experiment_folder + \
+#                pg.initial_datasets_folder + \
+#               'novelty_dataset.csv'    
+        
+
+    file = open(filename, 'w')              
+    for force_field_obj in force_field_wp_vector:
+        force_field = force_field_obj[0] ## [[eef_pos, eef_vel]]
+        init_obj_pos = force_field_obj[1]
+        final_obj_pos = force_field_obj[1]
+             
+        for eef_pos_vel in force_field:
+            eef_pos = eef_pos_vel[0]
+            eef_vel = eef_pos_vel[1]
+            
+            ## eef pos
+            file.write(str(eef_pos[0]))
+            file.write(',')
+            file.write(str(eef_pos[1]))
+            file.write(',')
+            file.write(str(eef_pos[2]))
+            file.write(',')
+
+            ## eef rot
+            file.write(str(eef_vel[0]))
+            file.write(',')
+            file.write(str(eef_vel[1]))
+            file.write(',')
+            file.write(str(eef_vel[2]))
+            file.write(',')
+            
+        ## init obj pos
+        file.write(str(init_obj_pos[0]))
+        file.write(',')
+        file.write(str(init_obj_pos[1]))
+        file.write(',')
+        file.write(str(init_obj_pos[2]))
+        file.write(',')
+        
+        ## init final_obj_pos pos
+        file.write(str(final_obj_pos[0]))
+        file.write(',')
+        file.write(str(final_obj_pos[1]))
+        file.write(',')
+        file.write(str(final_obj_pos[2]))
+        file.write(',')
+        
+        file.write('\n') 
+    file.close()
+
+'''
+Read dataset of 1 traj externally generated
+and transform it into raw deltas
+traj = [EP1 EV1 EP2 EV2 ... OP]
+EP = x y z ## eef position
+EV = x y z ## eef velocity
+OP = x y z ## obj position
+'''
+def read_dataset_force_fields(filename):
+    delta_vector = []
+    lines = open(filename, 'r').readlines()
+    for line in lines:        
+        current_delta_vector = []
+        force_field_vector = line[:-2].split(',') ## remove final , and EOL
+        nb_obj = 1# len(rospy.get_param("obj_name_vector")) ## expected
+        
+        obj_initial_pos = [float(force_field_vector[-6]),
+                           float(force_field_vector[-5]),
+                           float(force_field_vector[-4])]
+        obj_final_pos = [float(force_field_vector[-3]),
+                         float(force_field_vector[-2]),
+                         float(force_field_vector[-1])]
+        obtained_effect = discr.compute_effect(obj_initial_pos,
+                                                 obj_final_pos)
+        
+        related_info_size = 6 + 6*nb_obj
+        nb_positions = force_field_vector[:-6] / related_info_size
+        if not nb_positions % related_info_size:
+            print("ERROR - read_dataset_force_fields : wrong nb of values in the dataset")
+
+        for pos in range(nb_positions):
+            
+            current_x = float(force_field_vector[pos+0])
+            current_y = float(force_field_vector[pos+1])
+            current_z = float(force_field_vector[pos+2])
+            
+            vel_x = float(force_field_vector[pos+related_info_size+0])
+            vel_y = float(force_field_vector[pos+related_info_size+1])
+            vel_z = float(force_field_vector[pos+related_info_size+2])            
+                
+            current_delta = delta.Delta(
+                obtained_effect,
+                current_x,current_y,current_z,
+                vel_x, vel_y,vel_z,
+                obj_initial_pos,
+                obj_final_pos)
+         
+            current_delta_vector.append(current_delta)
+        delta_vector += current_delta_vector
+    
+    ## compute move step length
+    print('Move step length:', 2) ## TODOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+    
+    return delta_vector
+
+'''
+a
+'''
+def diffeoTrajAnalyzer(target, scalingVec):
     os.chdir('/home/maestre/git/diffeo/src/diffeo/python')
     
     target = target.T
@@ -43,110 +219,85 @@ def diffeoForceFieldGeneration(target, scalingVec):
     #Get the diffeo move obj
     thisMovement = PyDiffeoMoveObj()
     
-#    xCpp = TXT2Matrix(resultPath+"sourceTransform")   
-#    #Get stuff to perform integration
-#    #The demonstration takes 1sec to complete we will integrate for 1.5sec
-#    tFinal = 1.1
-#    deltaT = 1e-3
-#    
-#    allT = np.arange(0., tFinal, deltaT)
-#    nPoint = allT.size
-#    allX = np.zeros((dim, nPoint), order='fortran')
-#    #Create an offset that will occur at about 0.5 sec
-#    xOffset = np.array([-0.01, 0.01])
-#    nChange = np.floor(nPoint/2)
-#    
-#    #Initialize the point
-#    print(target.flags)
-#    xCurr = np.asfortranarray(target[:,0], dtype=np.float64).copy()
-##    print(target[:,0])
-#    print(xCurr.flags)
-#    #Dummy var for velocity
-#    vCurr = np.zeros(dim, dtype=np.float64, order='fortran')
-#    
-##    pFig, pAx = plt.subplots(1,1)
-#    
-#    T = time.time()
-#    for k in range(nPoint):
-#        print(k)
-#        allX[:,k]=xCurr
-#        #pAx.plot(xCurr[0], xCurr[1], 'x', color='grey')
-#        #getVelocity(self, np.ndarray[np.float64_t, ndim=1, mode = 'c'] xIn, np.ndarray[np.float64_t, ndim=1, mode = 'c'] vOut=np.zeros(0), whichSpace = 0):
-#        thisMovement.getVelocity(xCurr, vCurr) #Important for you: Returns the desired velocity given a point (in the defined space)
-#        print('For point {0} with coords {1} the velocity is {2}'.format(k, xCurr, vCurr))
-#        xCurr += vCurr*deltaT #explicit forward euler
-#        if k == nChange:
-#            thisMovement.setNewTranslation(xOffset)
-#    T = time.time()-T
-#    print("It took {0} seconds to perform simulations".format(T))
-#    
-#    pAx.plot( target[0,:], target[1,:], '.-r' ) ## orig
-#    pAx.plot( target[0,:]+xOffset[0], target[1,:]+xOffset[1], '--', color='orange' ) ## orig + offset
-#    pAx.plot( xCpp[0,:], xCpp[1,:], '.-b', linewidth=1 )
-#    pAx.plot( allX[0,:], allX[1,:], '-g', linewidth=5 ) #The actually followed traj
-#    plt.show()
-#    return xCpp.T
+    return thisMovement
+
+'''
+a
+'''
+def diffeoForceFieldGeneration(movement,
+                               curr_wp,
+                               vel_next_wp,
+                               wp_offset,
+                               nb_points_axis,
+                               obj_pos,
+                               target):
     
+    ## create the grid around the wp
+    grid_x = np.linspace(curr_wp[0] - wp_offset,
+                         curr_wp[0] + wp_offset,
+                         nb_points_axis)
+                         
+    grid_y = np.linspace(curr_wp[1] - wp_offset,
+                         curr_wp[1] + wp_offset,
+                         nb_points_axis)
+                         
+    grid_z = np.linspace(curr_wp[2] - wp_offset,
+                         curr_wp[2] + wp_offset,
+                         nb_points_axis)                         
     
-    ## creqte the grid
-    grid_dim = np.linspace(0,5,16)
-    a, b = np.meshgrid(grid_dim, grid_dim)
-    grid_pos_vector = np.asfortranarray(np.vstack((a.flatten(), b.flatten())))
-#    grid_orien_vector = np.zeros(grid_pos_vector.shape, dtype=np.float64, order='fortran')
-#    print(grid_pos_vector.flags)
-#    print(grid_orien_vector.flags)    
+    a, b, c = np.meshgrid(grid_x, grid_y, grid_z)
+    grid_pos_vector = np.asfortranarray(np.vstack((a.flatten(), 
+                                                   b.flatten(),
+                                                   c.flatten())))
 #    print('Coords:', grid_pos_vector)
-#    print('Velocities: ', grid_orien_vector)
-    
+#    print('Velocities: ', grid_orien_vector)    
        
-    ## compute velocities for each position of the grid
-    grid_vel_values = []
+    ## compute velocities for each position of the force field
+      
+    if vel_next_wp != [0,0,0]: ## traj wp added to force field
+        tmp = np.linalg.norm(vel_next_wp) 
+        vCurrNorm = vel_next_wp/tmp
+        vCurrNorm = [round(v, 3) for v in vCurrNorm]
+        force_field_values = [[curr_wp,vCurrNorm]]
+    else:
+        force_field_values = []
+    
+    grid_plot_pos = []
+    grid_plot_vel = []
     for pos in range(len(grid_pos_vector[0])):
-        xCurr = np.asfortranarray([grid_pos_vector[0][pos], grid_pos_vector[1][pos]], 
-                                  dtype=np.float64).copy()
-#        if xCurr not in target:
+        xCurr = np.asfortranarray([grid_pos_vector[0][pos], 
+                                   grid_pos_vector[1][pos],
+                                   grid_pos_vector[2][pos]], 
+                                   dtype=np.float64).copy()
         vCurr = np.zeros(len(xCurr), dtype=np.float64, order='fortran')
-        thisMovement.getVelocity(xCurr, vCurr)
+        movement.getVelocity(xCurr, vCurr)
         tmp = np.linalg.norm(vCurr)
         vCurrNorm = vCurr/tmp
-        grid_vel_values.append([xCurr, vCurrNorm ])
-        print('For point {0} the velocity is {1}'.format(
-              xCurr, vCurrNorm))        
+        vCurrNorm = [round(v, 3) for v in vCurrNorm]
+        force_field_values.append([xCurr, vCurrNorm ])
+        grid_plot_pos.append(xCurr)
+        grid_plot_vel.append(vCurr)
+#        print('For point {0} the velocity is {1}'.format(xCurr, vCurrNorm))        
 
     ## print velocities
-    pFig, pAx = plt.subplots(1,1) 
-    pAx.plot( target[0,:], target[1,:], '.-b', linewidth = 2)
-    for pos in range(len(grid_vel_values)):
-        curr_pos = grid_vel_values[pos][0]
-        curr_vel = grid_vel_values[pos][1]
-        pAx.plot( [curr_pos[0]], [curr_pos[1]], 'o', 
-                 color = 'black', markersize=2)
-        pylab.arrow(curr_pos[0], curr_pos[1], 
-                    curr_vel[0], curr_vel[1], 
-                    fc="k", ec="k",
-                    head_width=0.05, head_length=0.1,
-                    edgecolor='grey', linestyle='dotted')
+    pFig, pAx = plot_setup(obj_pos)
+    pAx.plot(target[:,0], target[:,1], target[:,2],
+             '.-r', linewidth = 2)
+             
+    pAx.quiver([v[0] for v in grid_plot_pos],
+               [v[1] for v in grid_plot_pos],
+               [v[2] for v in grid_plot_pos],
+               [v[0] for v in grid_plot_vel],
+               [v[1] for v in grid_plot_vel],
+               [v[2] for v in grid_plot_vel],
+               length = 0.1,
+               arrow_length_ratio = .1)
     plt.show()
-    
-#    plt.close()
         
-    return grid_vel_values
+    return force_field_values
+
 
 if __name__ == "__main__":
-
-#    target = np.array([[0.654974, -0.0959728, 0], 
-#                        [0.655759, -0.0540905, 0],
-#                        [0.655, -0.001, 0],
-#                        [0.605, -0.001, 0],
-#                        [0.555, -0.001, 0],
-#                        [0.505, 0.049, 0],
-#                        [0.555, 0.049, 0],
-#                        [0.605, 0.099, 0],
-#                        [0.655, 0.149, 0]],
-#                         np.float64)
-#    scalingVec = np.array([1., 1., 0.1, 0.05, 0.05, 0.05, 0.1, 1., 1.],
-#                          np.float64)
-
 #    target = np.array([[0, 0], 
 #                        [1,1],
 #                        [1,3],
@@ -156,39 +307,51 @@ if __name__ == "__main__":
 #                        [4,4]],
 #                         np.float64)
 
-    target = np.array([[4, 1], 
-                        [2,1],
-                        [1,3],
-                        [2,4],
-                        [4,4]],
-                         np.float64)
+#    target = np.array([[4, 1], 
+#                        [2,1],
+#                        [1,3],
+#                        [2,4],
+#                        [4,4]],
+#                         np.float64)
 
+    target = np.array([[2, 2, 0], 
+                       [2, 4, 0],
+                       [4, 4, 0]],
+                       np.float64)
 
     scalingVec = np.ones(len(target),np.float64)
 
-    grid_vel_values = diffeoForceFieldGeneration(target, scalingVec)
-#    print(grid_vel_values)
+    ## create a force field for each wp
+    wp_offset = 1
+    nb_points_axis = 5
+    init_obj_pos = [4, 4, 0]
 
+    movement = diffeoTrajAnalyzer(target,
+                                  scalingVec)
+    
+    force_field_wp_vector = []
+    pos = 0
+    for pos in range(len(target)):
+        curr_wp = target[pos]
+        if pos != len(target)-1:
+            next_wp = target[pos+1]    
+            vel_next_wp = [next_wp[0] - curr_wp[0],
+                           next_wp[1] - curr_wp[1],
+                           next_wp[2] - curr_wp[2]]
+        else:
+            vel_next_wp = [0,0,0]
+            
+        final_obj_pos = [6, 4, 0]
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        force_field = diffeoForceFieldGeneration(movement,
+                                                 curr_wp,
+                                                 vel_next_wp,
+                                                 wp_offset,
+                                                 nb_points_axis,
+                                                 init_obj_pos,
+                                                 target)
+        
+        force_field_wp_vector.append([force_field, 
+                                      init_obj_pos,
+                                      final_obj_pos])
+        #    print(force_field_values)
