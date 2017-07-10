@@ -10,14 +10,16 @@ import xml.etree.ElementTree as ET
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import pylab
+
+import rospy
 
 '''
 a
 '''
-def plot_setup(obj_pos = None):
+def plot_setup(obj_pos,
+               curr_wp):
     
-    fig = plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(9,9))
     fig.clf()
 #    ax = Axes3D(fig)
     ax = fig.gca(projection='3d')
@@ -37,10 +39,17 @@ def plot_setup(obj_pos = None):
 #    ax.view_init(90,-90)
 
     ## object
-    ax.bar3d(obj_pos[0] - .05/2, 
-             obj_pos[1] - .05/2, 
-             obj_pos[2] - .05/2, 
-             [.05], [.05], [.05], 
+#    ax.view_init(90,-90) # top view
+#    ax.view_init(0,270) # left view
+#    ax.view_init(0,0) # front view
+
+    obj_name = rospy.get_param('final_obj_name')
+    ax.bar3d(obj_pos[0] - rospy.get_param('obj_size_vector/'+obj_name +'/y')/2, 
+             obj_pos[1] - rospy.get_param('obj_size_vector/'+obj_name +'/x')/2, 
+             obj_pos[2] - rospy.get_param('obj_size_vector/'+obj_name +'/z')/2,
+             [rospy.get_param('obj_size_vector/'+obj_name +'/y')], 
+             [rospy.get_param('obj_size_vector/'+obj_name +'/x')], 
+             [rospy.get_param('obj_size_vector/'+obj_name +'/z')], 
              color='green',
              alpha=0.2,
              edgecolor='none')
@@ -59,10 +68,10 @@ def plot_setup(obj_pos = None):
              
     # limits
     if obj_pos != None:
-        lim = 0.5
-        ax.set_xlim3d([obj_pos[0]-lim, obj_pos[0]+lim])
-        ax.set_ylim3d([obj_pos[1]-lim, obj_pos[1]+lim])
-        ax.set_zlim3d([obj_pos[2]-lim, obj_pos[2]+lim])             
+        lim = 0.2
+        ax.set_xlim3d([curr_wp[0]-lim, curr_wp[0]+lim])
+        ax.set_ylim3d([curr_wp[1]-lim, curr_wp[1]+lim])
+        ax.set_zlim3d([curr_wp[2]-lim, curr_wp[2]+lim])             
 
     return fig, ax
 
@@ -227,6 +236,7 @@ a
 def diffeoForceFieldGeneration(movement,
                                curr_wp,
                                vel_next_wp,
+                               curr_open_vector,
                                wp_offset,
                                nb_points_axis,
                                obj_pos,
@@ -258,7 +268,11 @@ def diffeoForceFieldGeneration(movement,
         tmp = np.linalg.norm(vel_next_wp) 
         vCurrNorm = vel_next_wp/tmp
         vCurrNorm = [round(v, 3) for v in vCurrNorm]
-        force_field_values = [[curr_wp,vCurrNorm]]
+        force_field_values = []
+        for i in range(3): ## to add prob of executing this movement
+            force_field_values.append([curr_wp, vCurrNorm,
+                                       curr_open_vector[0],
+                                       curr_open_vector[1]])
     else:
         force_field_values = []
     
@@ -270,17 +284,21 @@ def diffeoForceFieldGeneration(movement,
                                    grid_pos_vector[2][pos]], 
                                    dtype=np.float64).copy()
         vCurr = np.zeros(len(xCurr), dtype=np.float64, order='fortran')
-        movement.getVelocity(xCurr, vCurr)
+        movement.getVelocity(xCurr, vCurr)        
         tmp = np.linalg.norm(vCurr)
         vCurrNorm = vCurr/tmp
         vCurrNorm = [round(v, 3) for v in vCurrNorm]
-        force_field_values.append([xCurr, vCurrNorm ])
+        force_field_values.append([xCurr, vCurrNorm, 
+                                   curr_open_vector[0],
+                                   curr_open_vector[1] ])
         grid_plot_pos.append(xCurr)
         grid_plot_vel.append(vCurr)
-#        print('For point {0} the velocity is {1}'.format(xCurr, vCurrNorm))        
+#        print('For point {0} the velocity is {1}'.format(xCurr, vCurrNorm))
+#        print(vCurr, vCurrNorm)
 
     ## print velocities
-    pFig, pAx = plot_setup(obj_pos)
+    pFig, pAx = plot_setup(obj_pos,
+                           curr_wp)
     pAx.plot(target[:,0], target[:,1], target[:,2],
              '.-r', linewidth = 2)
              
@@ -290,7 +308,7 @@ def diffeoForceFieldGeneration(movement,
                [v[0] for v in grid_plot_vel],
                [v[1] for v in grid_plot_vel],
                [v[2] for v in grid_plot_vel],
-               length = 0.1,
+               length = 0.01,
                arrow_length_ratio = .1)
     plt.show()
         
@@ -313,7 +331,7 @@ if __name__ == "__main__":
 #                        [2,4],
 #                        [4,4]],
 #                         np.float64)
-
+#
     target = np.array([[2, 2, 0], 
                        [2, 4, 0],
                        [4, 4, 0]],
@@ -325,10 +343,8 @@ if __name__ == "__main__":
     wp_offset = 1
     nb_points_axis = 5
     init_obj_pos = [4, 4, 0]
-
     movement = diffeoTrajAnalyzer(target,
                                   scalingVec)
-    
     force_field_wp_vector = []
     pos = 0
     for pos in range(len(target)):
@@ -336,21 +352,18 @@ if __name__ == "__main__":
         if pos != len(target)-1:
             next_wp = target[pos+1]    
             vel_next_wp = [next_wp[0] - curr_wp[0],
-                           next_wp[1] - curr_wp[1],
-                           next_wp[2] - curr_wp[2]]
+                           next_wp[1] - curr_wp[1]]
         else:
             vel_next_wp = [0,0,0]
             
-        final_obj_pos = [6, 4, 0]
-
+        final_obj_pos = [4,4,0]
         force_field = diffeoForceFieldGeneration(movement,
                                                  curr_wp,
                                                  vel_next_wp,
                                                  wp_offset,
                                                  nb_points_axis,
                                                  init_obj_pos,
-                                                 target)
-        
+                                                 target)        
         force_field_wp_vector.append([force_field, 
                                       init_obj_pos,
                                       final_obj_pos])
