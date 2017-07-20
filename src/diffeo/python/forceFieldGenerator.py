@@ -237,6 +237,7 @@ def diffeoForceFieldGeneration(movement,
                                curr_wp,
                                vel_next_wp,
                                curr_open_vector,
+                               curr_light_state, ## bool
                                wp_offset,
                                nb_points_axis,
                                obj_pos,
@@ -272,7 +273,8 @@ def diffeoForceFieldGeneration(movement,
         for i in range(3): ## to add prob of executing this movement
             force_field_values.append([curr_wp, vCurrNorm,
                                        curr_open_vector[0],
-                                       curr_open_vector[1]])
+                                       curr_open_vector[1],
+                                       curr_light_state])
     else:
         force_field_values = []
     
@@ -290,7 +292,8 @@ def diffeoForceFieldGeneration(movement,
         vCurrNorm = [round(v, 3) for v in vCurrNorm]
         force_field_values.append([xCurr, vCurrNorm, 
                                    curr_open_vector[0],
-                                   curr_open_vector[1] ])
+                                   curr_open_vector[1],
+                                   curr_light_state])
         grid_plot_pos.append(xCurr)
         grid_plot_vel.append(vCurr)
 #        print('For point {0} the velocity is {1}'.format(xCurr, vCurrNorm))
