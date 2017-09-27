@@ -5,6 +5,7 @@ import numpy as np
 from diffeoPy import *
 import time
 import os
+from scipy.linalg import norm
 
 import xml.etree.ElementTree as ET
 
@@ -43,16 +44,50 @@ def plot_setup(obj_pos,
 #    ax.view_init(0,270) # left view
 #    ax.view_init(0,0) # front view
 
-    obj_name = rospy.get_param('final_obj_name')
-    ax.bar3d(obj_pos[0] - rospy.get_param('obj_size_vector/'+obj_name +'/y')/2, 
-             obj_pos[1] - rospy.get_param('obj_size_vector/'+obj_name +'/x')/2, 
-             obj_pos[2] - rospy.get_param('obj_size_vector/'+obj_name +'/z')/2,
-             [rospy.get_param('obj_size_vector/'+obj_name +'/y')], 
-             [rospy.get_param('obj_size_vector/'+obj_name +'/x')], 
-             [rospy.get_param('obj_size_vector/'+obj_name +'/z')], 
-             color='green',
-             alpha=0.2,
-             edgecolor='none')
+#    obj_name = rospy.get_param('final_obj_name')
+#    ax.bar3d(obj_pos[0] - rospy.get_param('obj_size_vector/'+obj_name +'/y')/2, 
+#             obj_pos[1] - rospy.get_param('obj_size_vector/'+obj_name +'/x')/2, 
+#             obj_pos[2] - rospy.get_param('obj_size_vector/'+obj_name +'/z')/2,
+#             [rospy.get_param('obj_size_vector/'+obj_name +'/y')], 
+#             [rospy.get_param('obj_size_vector/'+obj_name +'/x')], 
+#             [rospy.get_param('obj_size_vector/'+obj_name +'/z')], 
+#             color='green',
+#             alpha=0.2,
+#             edgecolor='none')
+
+    ## http://stackoverflow.com/questions/39822480/plotting-a-solid-cylinder-centered-on-a-plane-in-matplotlib
+#    height = 0.09
+#    R = 0.035
+    height = 0.145
+    R = 0.05
+    p0 = np.array([obj_pos[0], obj_pos[1], obj_pos[2] + height/2]) #point at one end
+    p1 = np.array([obj_pos[0], obj_pos[1], obj_pos[2] - height/2]) #point at other end        
+    v = p1 - p0
+    mag = norm(v)
+    v = v / mag
+    not_v = np.array([1, 0, 0])
+    if (v == not_v).all():
+        not_v = np.array([0, 1, 0])
+    n1 = np.cross(v, not_v)
+    n1 /= norm(n1)
+    n2 = np.cross(v, n1)
+    t = np.linspace(0, mag, 2)
+    theta = np.linspace(0, 2 * np.pi, 100)
+    rsample = np.linspace(0, R, 2)
+    t, theta2 = np.meshgrid(t, theta)
+    rsample,theta = np.meshgrid(rsample, theta)
+    # "Tube"
+    X, Y, Z = [p0[i] + v[i] * t + R * np.sin(theta2) * n1[i] + R * np.cos(theta2) * n2[i] for i in [0, 1, 2]]
+    # "Bottom"
+    X2, Y2, Z2 = [p0[i] + rsample[i] * np.sin(theta) * n1[i] + rsample[i] * np.cos(theta) * n2[i] for i in [0, 1, 2]]
+    # "Top"
+    X3, Y3, Z3 = [p0[i] + v[i]*mag + rsample[i] * np.sin(theta) * n1[i] + rsample[i] * np.cos(theta) * n2[i] for i in [0, 1, 2]]        
+#    ax.plot_surface(X, Y, Z, color='blue', linewidth=0, alpha=0.2)
+#    ax.plot_surface(X2, Y2, Z2, color='blue', linewidth=0, alpha=0.2)
+#    ax.plot_surface(X3, Y3, Z3, color='blue', linewidth=0, alpha=0.2)   
+    ax.plot_surface(X, Y, Z, color='red', linewidth=0, alpha=0.2)
+    ax.plot_surface(X2, Y2, Z2, color='red', linewidth=0, alpha=0.2)
+    ax.plot_surface(X3, Y3, Z3, color='red', linewidth=0, alpha=0.2) 
 
     # robot
     robot_width = .2
@@ -193,7 +228,7 @@ def read_dataset_force_fields(filename):
 '''
 a
 '''
-def diffeoTrajAnalyzer(target, scalingVec):
+def diffeoTrajAnalyzer(num_traj, target, scalingVec):
     os.chdir('/home/maestre/git/diffeo/src/diffeo/python')
     
     target = target.T
@@ -209,9 +244,12 @@ def diffeoTrajAnalyzer(target, scalingVec):
     resultPath = root.find('generalOpts').find('resultPath').get('value')
     targetName = root.find('generalOpts').find('targetName').get('value')
     scalingName = root.find('searchOpts').find('distanceScaling').get('value')
-    timeName = root.find('generalOpts').find('targetTime').get('value')
+    timeName = root.find('generalOpts').find('targetTime').get('value')        
     
     assert not( (inputPath is None) or (resultPath is None) or (targetName is None) or (timeName is None) ), "At least one path definition not specified or accessible in xml"
+
+#    inputPath += str(num_traj)+'/'
+#    resultPath += str(num_traj)+'/'
     
     #Create the folder if non existing 
     subprocess.call(["mkdir", "-p", inputPath])
@@ -224,6 +262,10 @@ def diffeoTrajAnalyzer(target, scalingVec):
     Array2TXT(inputPath+timeName, timeVec)
     if not scalingName == 'manual':
         Array2TXT(inputPath+scalingName, scalingVec)
+#    Array2TXT(inputPath+targetName+str(num_traj), target)
+#    Array2TXT(inputPath+timeName+str(num_traj), timeVec)
+#    if not scalingName == 'manual':
+#        Array2TXT(inputPath+scalingName+str(num_traj), scalingVec)
     
     #Get the diffeo move obj
     thisMovement = PyDiffeoMoveObj()
@@ -240,7 +282,7 @@ def diffeoForceFieldGeneration(movement,
                                curr_light_state, ## bool
                                wp_offset,
                                nb_points_axis,
-                               obj_pos,
+                               init_obj_pos,
                                target):
     
     ## create the grid around the wp
@@ -299,12 +341,21 @@ def diffeoForceFieldGeneration(movement,
 #        print('For point {0} the velocity is {1}'.format(xCurr, vCurrNorm))
 #        print(vCurr, vCurrNorm)
 
-    ## print velocities
-    pFig, pAx = plot_setup(obj_pos,
+    ## plot velocity fields
+    try:
+        if rospy.get_param('light_state_0'):
+            color = 'green'
+        else:
+            color = 'purple'
+    except:
+        print('diffeoForceFieldGeneration : light_state_0 not available')
+        color = 'purple'
+    pFig, pAx = plot_setup(init_obj_pos,
                            curr_wp)
     pAx.plot(target[:,0], target[:,1], target[:,2],
-             '.-r', linewidth = 2)
-             
+             '-*', linewidth = 4,
+             color = color)
+
     pAx.quiver([v[0] for v in grid_plot_pos],
                [v[1] for v in grid_plot_pos],
                [v[2] for v in grid_plot_pos],
@@ -314,6 +365,9 @@ def diffeoForceFieldGeneration(movement,
                length = 0.01,
                arrow_length_ratio = .1)
     plt.show()
+#    
+#    plt.savefig('/home/maestre/Desktop/IMOL/demo_traj.png',
+#                dpi=400)
         
     return force_field_values
 
@@ -341,33 +395,37 @@ if __name__ == "__main__":
                        np.float64)
 
     scalingVec = np.ones(len(target),np.float64)
-
-    ## create a force field for each wp
-    wp_offset = 1
-    nb_points_axis = 5
-    init_obj_pos = [4, 4, 0]
-    movement = diffeoTrajAnalyzer(target,
-                                  scalingVec)
-    force_field_wp_vector = []
-    pos = 0
-    for pos in range(len(target)):
-        curr_wp = target[pos]
-        if pos != len(target)-1:
-            next_wp = target[pos+1]    
-            vel_next_wp = [next_wp[0] - curr_wp[0],
-                           next_wp[1] - curr_wp[1]]
-        else:
-            vel_next_wp = [0,0,0]
-            
-        final_obj_pos = [4,4,0]
-        force_field = diffeoForceFieldGeneration(movement,
-                                                 curr_wp,
-                                                 vel_next_wp,
-                                                 wp_offset,
-                                                 nb_points_axis,
-                                                 init_obj_pos,
-                                                 target)        
-        force_field_wp_vector.append([force_field, 
-                                      init_obj_pos,
-                                      final_obj_pos])
+    
+    for i in range(0,2):
+        ## create a force field for each wp
+        wp_offset = 1
+        nb_points_axis = 5
+        init_obj_pos = [4, 4, 0]
+        movement = diffeoTrajAnalyzer(i,
+                                      target,
+                                      scalingVec)    
+        force_field_wp_vector = []
+        pos = 0    
+        for pos in range(len(target)):
+            curr_wp = target[pos]
+            if pos != len(target)-1:
+                next_wp = target[pos+1]    
+                vel_next_wp = [next_wp[0] - curr_wp[0],
+                               next_wp[1] - curr_wp[1]]
+            else:
+                vel_next_wp = [0,0,0]
+                
+            final_obj_pos = [4,4,0]
+            force_field = diffeoForceFieldGeneration(movement,
+                                                     curr_wp,
+                                                     vel_next_wp,
+                                                     [0,0,0],
+                                                     [False, False, False],
+                                                     wp_offset,
+                                                     nb_points_axis,
+                                                     init_obj_pos,
+                                                     target)        
+            force_field_wp_vector.append([force_field, 
+                                          init_obj_pos,
+                                          final_obj_pos])
         #    print(force_field_values)
