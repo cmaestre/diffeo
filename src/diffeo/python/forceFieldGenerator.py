@@ -228,7 +228,7 @@ def read_dataset_force_fields(filename):
 '''
 a
 '''
-def diffeoTrajAnalyzer(num_traj, target, scalingVec):
+def diffeoTrajAnalyzer(target, scalingVec):
     os.chdir('/home/maestre/git/diffeo/src/diffeo/python')
     
     target = target.T
@@ -277,26 +277,32 @@ a
 '''
 def diffeoForceFieldGeneration(movement,
                                curr_wp,
-                               vel_next_wp,
+                               pos_vector,
+#                               vel_next_wp,
                                curr_open_vector,
                                curr_light_state, ## bool
-                               wp_offset,
-                               nb_points_axis,
+#                               wp_offset,
+#                               nb_points_axis,
                                init_obj_pos,
                                target):
     
-    ## create the grid around the wp
-    grid_x = np.linspace(curr_wp[0] - wp_offset,
-                         curr_wp[0] + wp_offset,
-                         nb_points_axis)
-                         
-    grid_y = np.linspace(curr_wp[1] - wp_offset,
-                         curr_wp[1] + wp_offset,
-                         nb_points_axis)
-                         
-    grid_z = np.linspace(curr_wp[2] - wp_offset,
-                         curr_wp[2] + wp_offset,
-                         nb_points_axis)                         
+#    ## create the grid around the wp
+#    grid_x = np.linspace(curr_wp[0] - wp_offset,
+#                         curr_wp[0] + wp_offset,
+#                         nb_points_axis)
+#                         
+#    grid_y = np.linspace(curr_wp[1] - wp_offset,
+#                         curr_wp[1] + wp_offset,
+#                         nb_points_axis)
+#                         
+#    grid_z = np.linspace(curr_wp[2] - wp_offset,
+#                         curr_wp[2] + wp_offset,
+#                         nb_points_axis)                         
+
+    ## get X, Y and Z values of positions
+    grid_x = sorted([v[0] for v in pos_vector])
+    grid_y = sorted([v[1] for v in pos_vector])
+    grid_z = sorted([v[2] for v in pos_vector])
     
     a, b, c = np.meshgrid(grid_x, grid_y, grid_z)
     grid_pos_vector = np.asfortranarray(np.vstack((a.flatten(), 
@@ -307,18 +313,18 @@ def diffeoForceFieldGeneration(movement,
        
     ## compute velocities for each position of the force field
       
-    if vel_next_wp != [0,0,0]: ## traj wp added to force field
-        tmp = np.linalg.norm(vel_next_wp) 
-        vCurrNorm = vel_next_wp/tmp
-        vCurrNorm = [round(v, 3) for v in vCurrNorm]
-        force_field_values = []
-        for i in range(3): ## to add prob of executing this movement
-            force_field_values.append([curr_wp, vCurrNorm,
-                                       curr_open_vector[0],
-                                       curr_open_vector[1],
-                                       curr_light_state])
-    else:
-        force_field_values = []
+#    if vel_next_wp != [0,0,0]: ## traj wp added to force field
+#        tmp = np.linalg.norm(vel_next_wp) 
+#        vCurrNorm = vel_next_wp/tmp
+#        vCurrNorm = [round(v, 3) for v in vCurrNorm]
+#        force_field_values = []
+#        for i in range(3): ## to add prob of executing this movement
+#            force_field_values.append([curr_wp, vCurrNorm,
+#                                       curr_open_vector[0],
+#                                       curr_open_vector[1],
+#                                       curr_light_state])
+#    else:
+#        force_field_values = []
     
     grid_plot_pos = []
     grid_plot_vel = []
